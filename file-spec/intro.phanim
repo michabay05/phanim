@@ -1,0 +1,8 @@
+%DATA_SECTION%
+Line {
+    id: 0,
+    start: (100, 100),
+    end: (500, 500),
+    stroke_width: 1.0,
+    stroke_color: (0.0, 0.0, 0.0, 0.0)
+}

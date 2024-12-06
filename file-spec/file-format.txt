@@ -1,0 +1,51 @@
+Source: https://manimclass.com/manim-animation-types/
+List of actions supported
+    - FadeIn
+    - FadeOut
+    - ColorFade
+    - PositionTransform
+    - Scale
+    - SwapPosition
+    - SwapColor
+    - Create
+    - PauseScene
+    - DelayedStart
+
+==================================================================
+%DATA_SECTION%
+Line {
+    id: u32,
+    start: Vector2,
+    end: Vector2,
+    stroke_width: float,
+    stroke_color: Vector4,
+}
+
+Circle {
+    id: u32,
+    center: Vector2,
+    radius: float,
+    fill_color: Vector4,
+    stroke_width: float,
+    stroke_color: Vector4,
+}
+
+Rectangle {
+    id: u32,
+    top_left: Vector2,
+    width: float,
+    height: float,
+    fill_color: Vector4,
+    stroke_width: float,
+    stroke_color: Vector4,
+}
+
+TexText {
+    id: u32,
+    text: String,
+    font_size: float,
+    position: Vector2,
+}
+
+%ACTION_SECTION%
+FadeIn()
