@@ -22,14 +22,16 @@ typedef enum {
 } RateFunc;
 
 typedef enum {
-    AO_LINE,
-    AO_RECT,
-    AO_CIRCLE,
-} AnimObj;
+    AOK_LINE,
+    AOK_RECT,
+    AOK_CIRCLE,
+} AnimObjKind;
 
 typedef enum {
     AK_CREATE,
     AK_POSITION_TRANSFORM,
+    AK_COLOR_FADE,
+    AK_SCALE,
 } AnimKind;
 
 typedef struct {
@@ -39,13 +41,11 @@ typedef struct {
     Color color;
 } Line;
 
-// TODO: rename start to obj
-// TODO: rename end to target
-// TODO: rename anim_obj to obj_kind
 typedef struct Anim {
     void *start;
-    void *end;
-    AnimObj anim_obj;
+    void *ptr;
+    void *target;
+    AnimObjKind obj_kind;
     AnimKind anim_kind;
     float anim_time;
     float duration;

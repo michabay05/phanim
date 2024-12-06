@@ -15,7 +15,7 @@ typedef struct {
 static Phanim CORE = {0};
 
 static float rate_func(RateFunc func, float anim_time, float duration);
-static void phanim_direct_render(void *ptr, AnimObj obj);
+static void phanim_direct_render(void *ptr, AnimObjKind obj);
 static void phanim_anim_line(Anim *a, float t);
 static void anim_print(Anim *a);
 
@@ -33,6 +33,7 @@ size_t phanim_add(Anim anim) {
         CORE.items = arena_realloc(&CORE.arena, CORE.items, CORE.capacity * sizeof(*CORE.items), new_capacity * sizeof(*CORE.items));
         CORE.capacity = new_capacity;
     }
+
     size_t ind = CORE.count;
     CORE.items[ind] = anim;
     anim_print(&CORE.items[ind]);
@@ -43,34 +44,16 @@ size_t phanim_add(Anim anim) {
 void phanim_animate(size_t ind, float dt) {
     CORE.time += dt;
     Anim *a = &CORE.items[ind];
-    if (a->anim_time <= CORE.time) {
-        if (CORE.time < a->anim_time + a->duration) {
-            a->anim_time += dt;
-        } else {
-            phanim_direct_render(a->end, a->anim_obj);
-            return;
-        }
-    } else {
-        return;
+    if (a->anim_time <= a->duration) {
+        a->anim_time += dt;
     }
-    float t = rate_func(RF_CUBIC_SMOOTH_STEP, a->anim_time, a->anim_time + a->duration);
-    // Clamp values between 0 and 1
+    float t = rate_func(RF_LINEAR, a->anim_time, a->duration);
     t = Clamp(t, 0.0f, 1.0f);
 
-    switch (a->anim_obj) {
-        case AO_LINE: phanim_anim_line(a, t); break;
-        default:
-            PHANIM_TODO("AOK_RECT && AOK_CIRCLE");
-            break;
-    }
-}
+    anim_print(a);
 
-static void phanim_direct_render(void *ptr, AnimObj obj) {
-    switch (obj) {
-        case AO_LINE:
-            Line *l = ptr;
-            DrawLineEx(l->start, l->end, l->stroke_width, l->color);
-            break;
+    switch (a->obj_kind) {
+        case AOK_LINE: phanim_anim_line(a, t); break;
         default:
             PHANIM_TODO("AOK_RECT && AOK_CIRCLE");
             break;
@@ -78,18 +61,29 @@ static void phanim_direct_render(void *ptr, AnimObj obj) {
 }
 
 static void phanim_anim_line(Anim *a, float t) {
-    Line *ls = a->start;
-    Line *le = a->end;
     switch (a->anim_kind) {
-        case AK_CREATE: {
-            Vector2 current = Vector2Lerp(ls->start, ls->end, t);
-            DrawLineEx(ls->start, current, ls->stroke_width, ls->color);
-        } break;
+        case AK_CREATE:
         case AK_POSITION_TRANSFORM: {
-            Vector2 start = Vector2Lerp(ls->start, le->start, t);
-            Vector2 end = Vector2Lerp(ls->end, le->end, t);
-            DrawLineEx(start, end, ls->stroke_width, ls->color);
+            Vector2 start = *(Vector2*)a->start;
+            Vector2 target = *(Vector2*)a->target;
+            Vector2 *ptr = a->ptr;
+            *ptr = Vector2Lerp(start, target, t);
         } break;
+
+        case AK_COLOR_FADE: {
+            Color start = *(Color*)a->start;
+            Color target = *(Color*)a->target;
+            Color *ptr = a->ptr;
+            *ptr = ColorLerp(start, target, t);
+        } break;
+
+        case AK_SCALE: {
+            float start = *(float*)a->start;
+            float target = *(float*)a->target;
+            float *ptr = a->ptr;
+            *ptr = Lerp(start, target, t);
+        } break;
+
         default:
             PHANIM_TODO("Look at other anim kinds that haven't been implemented!");
             break;
@@ -125,7 +119,7 @@ static float rate_func(RateFunc func, float anim_time, float duration) {
 
 static void anim_print(Anim *a) {
     TraceLog(LOG_INFO, "Anim {");
-    TraceLog(LOG_INFO, "    obj: %d", a->anim_obj);
+    TraceLog(LOG_INFO, "    obj: %d", a->obj_kind);
     TraceLog(LOG_INFO, "    kind: %d", a->anim_kind);
     TraceLog(LOG_INFO, "    time: %.2f", a->anim_time);
     TraceLog(LOG_INFO, "    duration: %.2f", a->duration);
