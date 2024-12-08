@@ -1,44 +1,49 @@
 #include "phanim.h"
 
-// TODO: when it's a CREATE animation, handle what the target value should be
-//       ideally, it should start as a point and create itself
-
 static Arena obj_arena = {0};
 
-int main(void) {
+typedef struct {
+    Vector2 center;
+    float radius;
+    Color color;
+    float stroke_width;
+    Color stroke_color;
+} Circle;
+
+int main(void)
+{
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(800, 600, "Physics Animations");
-    SetTargetFPS(60);
+    SetTargetFPS(30);
 
-    Line *l1 = arena_alloc(&obj_arena, sizeof(Line));
-    l1->start = (Vector2) {100, 100};
-    l1->end = (Vector2) {500, 500};
-    l1->stroke_width = 3.0f;
-    l1->color = RED;
-
-    float *start = arena_alloc(&obj_arena, sizeof(float));
-    *start = 3.0f;
-
-    float *end = arena_alloc(&obj_arena, sizeof(float));
-    *end = 20.0f;
-
-    Anim anim1 = {
-        .ptr = &l1->stroke_width,
-        .start = start,
-        .target = end,
-        .obj_kind = AOK_LINE,
-        .anim_kind = AK_SCALE,
-        .anim_time = 0.0f,
-        .duration = 1.5f,
+    Circle *c = arena_alloc(&obj_arena, sizeof(Circle));
+    *c = (Circle) {
+        .center = (Vector2) {160, 100},
+        .radius = 40,
+        .color = RED,
+        .stroke_width = 0.0f,
+        .stroke_color = RED,
     };
-    size_t ind1 = phanim_add(anim1);
+
+    Vector2 *target = arena_alloc(&obj_arena, sizeof(Vector2));
+    *target = (Vector2) {640, 500};
+    phanim_make_anim(&c->center, target, AVT_VEC2, 2.5f);
+
+    phanim_pause(2.5f);
+
+    Vector2 *target1 = arena_alloc(&obj_arena, sizeof(Vector2));
+    *target1 = (Vector2) {400, 300};
+    phanim_make_anim(&c->center, target1, AVT_VEC2, 2.5f);
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
-        phanim_animate(ind1, dt);
+        phanim_update(dt);
 
         BeginDrawing();
         ClearBackground(GetColor(0x0));
-        DrawLineEx(l1->start, l1->end, l1->stroke_width, l1->color);
+
+        DrawCircleV(c->center, c->radius, c->color);
+
         DrawFPS(10, 10);
         EndDrawing();
     }

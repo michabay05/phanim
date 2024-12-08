@@ -18,7 +18,6 @@ typedef enum {
     RF_CUBIC_SMOOTH_STEP,
     RF_QUINTIC_SMOOTH_STEP,
     RF_3B1B_SMOOTH_STEP,
-    RF_SHADER_SMOOTHSTEP,
 } RateFunc;
 
 typedef enum {
@@ -32,7 +31,14 @@ typedef enum {
     AK_POSITION_TRANSFORM,
     AK_COLOR_FADE,
     AK_SCALE,
+    AK_PAUSE,
 } AnimKind;
+
+typedef enum {
+    AVT_SCALAR,
+    AVT_VEC2,
+    AVT_COLOR,
+} AnimValType;
 
 typedef struct {
     Vector2 start;
@@ -41,16 +47,16 @@ typedef struct {
     Color color;
 } Line;
 
-typedef struct Anim {
-    void *start;
+// TODO: add a group id to group anims that should happen at the same time
+typedef struct {
     void *ptr;
     void *target;
-    AnimObjKind obj_kind;
-    AnimKind anim_kind;
+    AnimValType val_type;
     float anim_time;
     float duration;
 } Anim;
 
 bool phanim_init();
-size_t phanim_add(Anim anim);
-void phanim_animate(size_t id, float dt);
+void phanim_make_anim(void *obj, void *target, AnimValType val_type, float duration);
+void phanim_pause(float duration);
+void phanim_update(float dt);
