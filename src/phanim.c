@@ -27,11 +27,11 @@ static float cubic_smoothstep(float x, float min, float max);
 static float quintic_smoothstep(float x, float min, float max);
 static size_t phanim_add(Anim anim);
 static void phanim_direct_render(void *ptr, AnimObjKind obj);
-static void phanim_anim_line(Anim *a, float t);
-static void phanim_anim_circle(Anim *a, float t);
+// static void phanim_anim_line(Anim *a, float t);
+// static void phanim_anim_circle(Anim *a, float t);
 static void anim_print(Anim *a);
 
-void phanim_init()
+void phanim_init(void)
 {
     CORE.items = NULL;
     CORE.anim_count = 0;
@@ -42,7 +42,7 @@ void phanim_init()
     CORE.time = 0.0f;
 }
 
-void phanim_deinit()
+void phanim_deinit(void)
 {
     arena_free(&CORE.arena);
 }
@@ -73,11 +73,12 @@ void phanim_pause(float duration)
     phanim_add(a);
 }
 
-void phanim_update(float dt)
+// Returns 'true' if animation is complete
+bool phanim_update(float dt)
 {
     // TraceLog(LOG_INFO, "anim_current = %d", CORE.anim_current);
     // TraceLog(LOG_INFO, "anim_count = %d", CORE.anim_count);
-    if (CORE.anim_completed) return;
+    if (CORE.anim_completed) return true;
     CORE.time += dt;
 
     Anim *a = &CORE.items[CORE.anim_current];
@@ -87,13 +88,14 @@ void phanim_update(float dt)
             a = &CORE.items[CORE.anim_current];
         } else {
             CORE.anim_completed = true;
-            return;
+            return true;
         }
     }
     if (a->anim_time < a->duration) {
         a->anim_time += dt;
     }
-    float t = rate_func(RF_LINEAR, a->anim_time, a->duration);
+    // float t = rate_func(RF_LINEAR, a->anim_time, a->duration);
+    float t = quintic_smoothstep(a->anim_time, 0.0f, a->duration);
 
     switch (a->val_type) {
         case AVT_VEC2: {
@@ -105,13 +107,24 @@ void phanim_update(float dt)
         case AVT_SCALAR: {
             if (a->ptr == NULL && a->target == NULL) {
                 // Probably, a pause scene
-                return;
             }
         } break;
 
         default: {
             PHANIM_TODO("Implement phanim_update() for AVT_SCALAR && AVT_COLOR");
         } break;
+    }
+
+    return false;
+}
+
+void phanim_reset_anim(void)
+{
+    CORE.anim_completed = false;
+    CORE.anim_current = 0;
+    for (size_t i = 0; i < CORE.anim_count; i++) {
+        Anim *a = &CORE.items[i];
+        a->anim_time = 0.0f;
     }
 }
 
@@ -128,51 +141,6 @@ static size_t phanim_add(Anim anim)
     CORE.anim_count++;
     return ind;
 }
-
-#if 0
-static void phanim_anim_circle(Anim *a, float t)
-{
-    switch (a->anim_kind) {
-        case AK_POSITION_TRANSFORM: {
-            Vector2 start = *(Vector2*)a->start;
-            Vector2 target = *(Vector2*)a->target;
-            Vector2 *ptr = a->ptr;
-            *ptr = Vector2Lerp(start, target, t);
-        } break;
-    }
-}
-
-static void phanim_anim_line(Anim *a, float t)
-{
-    switch (a->anim_kind) {
-        case AK_CREATE:
-        case AK_POSITION_TRANSFORM: {
-            Vector2 start = *(Vector2*)a->start;
-            Vector2 target = *(Vector2*)a->target;
-            Vector2 *ptr = a->ptr;
-            *ptr = Vector2Lerp(start, target, t);
-        } break;
-
-        case AK_COLOR_FADE: {
-            Color start = *(Color*)a->start;
-            Color target = *(Color*)a->target;
-            Color *ptr = a->ptr;
-            *ptr = ColorLerp(start, target, t);
-        } break;
-
-        case AK_SCALE: {
-            float start = *(float*)a->start;
-            float target = *(float*)a->target;
-            float *ptr = a->ptr;
-            *ptr = Lerp(start, target, t);
-        } break;
-
-        default:
-            PHANIM_TODO("Look at other anim kinds that haven't been implemented!");
-            break;
-    }
-}
-#endif
 
 static float rate_func(RateFunc func, float anim_time, float duration)
 {
@@ -253,3 +221,48 @@ static void anim_print(Anim *a)
     TraceLog(LOG_INFO, "    duration: %.2f", a->duration);
     TraceLog(LOG_INFO, "}");
 }
+
+#if 0
+static void phanim_anim_circle(Anim *a, float t)
+{
+    switch (a->anim_kind) {
+        case AK_POSITION_TRANSFORM: {
+            Vector2 start = *(Vector2*)a->start;
+            Vector2 target = *(Vector2*)a->target;
+            Vector2 *ptr = a->ptr;
+            *ptr = Vector2Lerp(start, target, t);
+        } break;
+    }
+}
+
+static void phanim_anim_line(Anim *a, float t)
+{
+    switch (a->anim_kind) {
+        case AK_CREATE:
+        case AK_POSITION_TRANSFORM: {
+            Vector2 start = *(Vector2*)a->start;
+            Vector2 target = *(Vector2*)a->target;
+            Vector2 *ptr = a->ptr;
+            *ptr = Vector2Lerp(start, target, t);
+        } break;
+
+        case AK_COLOR_FADE: {
+            Color start = *(Color*)a->start;
+            Color target = *(Color*)a->target;
+            Color *ptr = a->ptr;
+            *ptr = ColorLerp(start, target, t);
+        } break;
+
+        case AK_SCALE: {
+            float start = *(float*)a->start;
+            float target = *(float*)a->target;
+            float *ptr = a->ptr;
+            *ptr = Lerp(start, target, t);
+        } break;
+
+        default:
+            PHANIM_TODO("Look at other anim kinds that haven't been implemented!");
+            break;
+    }
+}
+#endif
