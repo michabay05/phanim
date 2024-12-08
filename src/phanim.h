@@ -56,7 +56,7 @@ typedef struct {
     float duration;
 } Anim;
 
-bool phanim_init();
+void phanim_init();
 void phanim_make_anim(void *obj, void *target, AnimValType val_type, float duration);
 void phanim_pause(float duration);
 void phanim_update(float dt);

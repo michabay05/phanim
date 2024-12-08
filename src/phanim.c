@@ -1,5 +1,11 @@
 #include <assert.h>
 
+// TODOs
+//   - Groups
+//   - Smooth interpolations
+//   - Rendering into a video
+//   - Mouse position to screen unit
+
 #define ARENA_IMPLEMENTATION
 #include "phanim.h"
 
@@ -25,7 +31,7 @@ static void phanim_anim_line(Anim *a, float t);
 static void phanim_anim_circle(Anim *a, float t);
 static void anim_print(Anim *a);
 
-bool phanim_init()
+void phanim_init()
 {
     CORE.items = NULL;
     CORE.anim_count = 0;
@@ -36,7 +42,7 @@ bool phanim_init()
     CORE.time = 0.0f;
 }
 
-bool phanim_deinit()
+void phanim_deinit()
 {
     arena_free(&CORE.arena);
 }
