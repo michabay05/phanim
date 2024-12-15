@@ -18,16 +18,16 @@ Line {
     start: Vector2,
     end: Vector2,
     stroke_width: float,
-    stroke_color: Vector4,
+    stroke_color: Color,
 }
 
 Circle {
     id: u32,
     center: Vector2,
     radius: float,
-    fill_color: Vector4,
+    fill_color: Color,
     stroke_width: float,
-    stroke_color: Vector4,
+    stroke_color: Color,
 }
 
 Rectangle {
@@ -35,9 +35,9 @@ Rectangle {
     top_left: Vector2,
     width: float,
     height: float,
-    fill_color: Vector4,
+    fill_color: Color,
     stroke_width: float,
-    stroke_color: Vector4,
+    stroke_color: Color,
 }
 
 TexText {

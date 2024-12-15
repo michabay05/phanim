@@ -12,6 +12,10 @@
 #define PHANIM_TODO(message) do { TraceLog(LOG_WARNING, "%s:%d: TODO: %s\n", __FILE__, __LINE__, message); abort(); } while(0)
 #define PHANIM_UNREACHABLE(message) do { TraceLog(LOG_WARNING, "%s:%d: UNREACHABLE: %s\n", __FILE__, __LINE__, message); abort(); } while(0)
 
+#define vec2(cx, cy) CLITERAL(Vector2){cx, cy}
+#define color(r, g, b, a) CLITERAL(Color){ r, g, b, a }
+
+typedef unsigned char u8;
 typedef enum {
     RF_LINEAR,
     RF_SINE,
@@ -21,10 +25,10 @@ typedef enum {
 } RateFunc;
 
 typedef enum {
-    AOK_LINE,
-    AOK_RECT,
-    AOK_CIRCLE,
-} AnimObjKind;
+    OK_LINE,
+    OK_RECT,
+    OK_CIRCLE,
+} ObjKind;
 
 typedef enum {
     AK_CREATE,
@@ -35,7 +39,8 @@ typedef enum {
 } AnimKind;
 
 typedef enum {
-    AVT_SCALAR,
+    AVT_U8,
+    AVT_FLOAT,
     AVT_VEC2,
     AVT_COLOR,
 } AnimValType;
@@ -45,20 +50,33 @@ typedef struct {
     Vector2 end;
     float stroke_width;
     Color color;
-} Line;
+} LineData;
 
-// TODO: add a group id to group anims that should happen at the same time
 typedef struct {
-    void *ptr;
-    void *target;
-    AnimValType val_type;
-    float anim_time;
-    float duration;
-} Anim;
+    Vector2 center;
+    float radius;
+    Color color;
+    float stroke_width;
+    Color stroke_color;
+} Circle;
+
+typedef struct {
+    ObjKind kind;
+    bool should_render;
+    union {
+        Circle circle;
+    };
+} Object;
 
 void phanim_init(void);
 void phanim_deinit(void);
-void phanim_make_anim(void *obj, void *target, AnimValType val_type, float duration);
+float phanim_get_time(void);
+size_t phanim_anim_count(void);
+float phanim_total_anim_time(void);
+void phanim_make_anim(void *ptr, void *start, void *target, AnimValType val_type, float duration);
+size_t phanim_circle(Vector2 center, float radius, Color color);
+void phanim_move(size_t id, Vector2 target, float duration);
+void phanim_fade(size_t id, u8 target, float duration);
 void phanim_pause(float duration);
 bool phanim_update(float dt);
-void phanim_reset_anim(void);
+void phanim_render(void);
