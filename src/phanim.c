@@ -1,38 +1,51 @@
 #include "raylib.h"
+#include "raymath.h"
 #include <assert.h>
 
 // TODOs
-//   - Add a mechanism to group animations
-//   - Improve smooth interpolations
-//   - Added video rendering feature
-//   - Implement mouse position to screen unit (for debugging)
-//   - Determine how to render objects
+//   [ ] Add a mechanism to group animations
+//   [ ] Improve smooth interpolations
+//   [ ] Added video rendering feature
+//   [ ] Implement mouse position to screen unit (for debugging)
+//       - Crosshair-style
+//   [ ] Determine how to render objects
 //       - Right now, all objects are rendered always. Rendering is determined by
 //         the opacity of the object
+//       - POTENTIAL SOLUTION: When objects are initially created, they aren't renderable.
+//          However, on the first frame that an anim with its object id is updated, it
+//          becomes renderable
+//   [ ] Setup a better pausing, i.e. waiting for X seconds, system
+//   [ ] Establish a coordinate systems based around relative units
+//   [ ] Remove obj and anim id because it's redundant (index and id are the same thing)
 
 #define ARENA_IMPLEMENTATION
 #include "phanim.h"
 
 #define DEFAULT_INIT_CAP 10
+#define DEFAULT_LINE_THICKNESS 3.0f
 
 // TODO: add a group id to group anims that should happen at the same time
 typedef struct {
+    size_t id;
     void *ptr;
     void *start;
     void *target;
     AnimValType val_type;
     float anim_time;
     float duration;
+    InterpFunc func;
 } Anim;
 
 typedef struct {
     // Miscellaneous
     Arena obj_arena, anim_arena, temp_arena;
     float time;
+    Color background;
     // Anims
     Anim *anims;
     size_t anim_count, anim_capacity;
     size_t anim_current;
+    bool completed;
     // Objects
     Object *objs;
     size_t obj_count, obj_capacity;
@@ -40,80 +53,245 @@ typedef struct {
 
 static Phanim CORE = {0};
 
-static float rate_func(RateFunc func, float anim_time, float duration);
-static float cubic_smoothstep(float x, float min, float max);
-static float quintic_smoothstep(float x, float min, float max);
+static float rate_func(InterpFunc func, float anim_time, float duration);
 static size_t phanim_add_anim(Anim anim);
 static size_t phanim_add_obj(Object obj);
-static Vector2 *phanim_vec2(Vector2 val);
-static u8 *phanim_u8(u8 val);
+static float *phanim_dfloat(float val);
+static Vector2 *phanim_dvec2(Vector2 val);
+static Color *phanim_dcolor(Color val);
 static void anim_print(Anim *a);
+static void assert_id(size_t id, bool is_anim);
 
-void phanim_init(void)
+void PhanimInit(void)
 {
     CORE.anims = NULL;
     CORE.anim_count = 0;
     CORE.anim_capacity = DEFAULT_INIT_CAP;
     CORE.anim_current = 0;
+    CORE.completed = false;
     CORE.obj_arena = (Arena) {0};
     CORE.anim_arena = (Arena) {0};
     CORE.temp_arena = (Arena) {0};
     CORE.time = 0.0f;
 }
 
-void phanim_deinit(void)
+void PhanimDeinit(void)
 {
     arena_free(&CORE.obj_arena);
     arena_free(&CORE.anim_arena);
     arena_free(&CORE.temp_arena);
 }
 
-float phanim_get_time(void)
+float PhanimGetTime(void)
 {
     return CORE.time;
 }
 
-size_t phanim_anim_count(void)
+size_t PhanimCurrentAnimId(void)
+{
+    return !CORE.completed ? CORE.anim_current : PhanimAnimCount();
+}
+
+size_t PhanimAnimCount(void)
 {
     return CORE.anim_count;
 }
 
-float phanim_total_anim_time(void)
+Color PhanimGetBackground(void)
+{
+    return CORE.background;
+}
+
+void PhanimSetBackground(Color color)
+{
+    CORE.background = color;
+}
+
+float PhanimTotalAnimTime(void)
 {
     float total = 0.0f;
-    for (int i = 0; i < CORE.anim_count; i++) {
+    for (size_t i = 0; i < CORE.anim_count; i++) {
         Anim *a = &CORE.anims[i];
         total += a->duration;
     }
     return total;
 }
 
-void phanim_make_anim(void *ptr, void *start, void *target, AnimValType val_type, float duration)
+size_t PhanimMakeAnim(void *ptr, void *start, void *target, AnimValType val_type, float duration)
 {
     Anim a = {
+        .id = CORE.anim_count,
         .ptr = ptr,
         .start = start,
         .target = target,
         .val_type = val_type,
         .anim_time = 0.0,
-        .duration = duration
+        .duration = duration,
+        .func = RF_CUBIC_SMOOTH_STEP
     };
 
-    phanim_add_anim(a);
+    return phanim_add_anim(a);
 }
 
-void phanim_pause(float duration)
+void PhanimChangeInterpFunc(size_t id, InterpFunc func)
 {
-    phanim_make_anim(NULL, NULL, NULL, AVT_FLOAT, duration);
+    assert_id(id, true);
+    CORE.anims[id].func = func;
 }
 
-// Returns 'true' if animation is complete
-bool phanim_update(float dt)
+void PhanimPause(float duration)
 {
-    // TraceLog(LOG_INFO, "anim_current = %d", CORE.anim_current);
-    // TraceLog(LOG_INFO, "anim_count = %d", CORE.anim_count);
-    if (CORE.time >= phanim_total_anim_time()) return true;
-    CORE.time += dt;
+    PhanimMakeAnim(NULL, NULL, NULL, AVT_FLOAT, duration);
+}
+
+size_t PhanimLine(Vector2 start, Vector2 end, Color color)
+{
+    LineData l = {
+        .start = start,
+        .size = Vector2Subtract(end, start),
+        .thickness = DEFAULT_LINE_THICKNESS,
+        .color = color,
+    };
+
+    Object obj = {
+        .id = CORE.obj_count,
+        .kind = OK_LINE,
+        .should_render = true,
+        .line = l,
+    };
+
+    return phanim_add_obj(obj);
+}
+
+size_t PhanimCircle(Vector2 center, float radius, Color color)
+{
+    CircleData c = {
+        .center = center,
+        .radius = radius,
+        .color = color,
+        .stroke_width = 0.0f,
+        .stroke_color = BLANK,
+    };
+
+    Object obj = {
+        .id = CORE.obj_count,
+        .kind = OK_CIRCLE,
+        .should_render = true,
+        .circle = c,
+    };
+
+    return phanim_add_obj(obj);
+}
+
+void PhanimTransformPos(size_t id, Vector2 start, Vector2 target, float duration)
+{
+    assert_id(id, false);
+    Object *obj = &CORE.objs[id];
+    Vector2 *ptr = NULL;
+    switch (obj->kind) {
+        case OK_LINE: {
+            ptr = &obj->line.start;
+        } break;
+
+        case OK_RECT: {
+            PHANIM_TODO("Implement POS_TRANSFORM for OK_RECT");
+        } break;
+
+        case OK_CIRCLE: {
+            ptr = &obj->circle.center;
+        } break;
+
+        default: {
+            PHANIM_UNREACHABLE("Unknown object kind!");
+        } break;
+    }
+
+    PhanimMakeAnim(ptr, phanim_dvec2(start), phanim_dvec2(target), AVT_VEC2, duration);
+}
+
+void PhanimFadeColor(size_t id, Color start, Color target, float duration)
+{
+    assert_id(id, false);
+    Object *obj = &CORE.objs[id];
+    Color *ptr = NULL;
+    switch (obj->kind) {
+        case OK_LINE: {
+            ptr = &obj->line.color;
+        } break;
+
+        case OK_RECT: {
+            PHANIM_TODO("Implement AK_MOVE for OK_RECT");
+        } break;
+
+        case OK_CIRCLE: {
+            ptr = &obj->circle.color;
+        } break;
+
+        default: {
+            PHANIM_UNREACHABLE("Unknown object kind!");
+        } break;
+    }
+
+    PhanimMakeAnim(ptr, phanim_dcolor(start), phanim_dcolor(target), AVT_COLOR, duration);
+}
+
+size_t PhanimScaleSizeFloat(size_t id, float start, float target, float duration)
+{
+    assert_id(id, false);
+    Object *obj = &CORE.objs[id];
+    float *ptr = NULL;
+    switch (obj->kind) {
+        case OK_RECT:
+        case OK_LINE: {
+            PHANIM_WARN("Lines and Rects shouldn't be scaled using PhanimScaleSizeFloat()");
+            return PHANIM_NO_ANIM;
+        } break;
+
+        case OK_CIRCLE: {
+            ptr = &obj->circle.radius;
+        } break;
+
+        default: {
+            PHANIM_UNREACHABLE("Unknown object kind!");
+        } break;
+    }
+
+    return PhanimMakeAnim(ptr, phanim_dfloat(start), phanim_dfloat(target), AVT_FLOAT, duration);
+}
+
+void PhanimScaleSizeVec2(size_t id, Vector2 start, Vector2 target, float duration)
+{
+    assert_id(id, false);
+    Object *obj = &CORE.objs[id];
+    Vector2 *ptr = NULL;
+    switch (obj->kind) {
+        case OK_LINE: {
+            ptr = &obj->line.size;
+        } break;
+
+        case OK_RECT: {
+            PHANIM_TODO("Implement AK_MOVE for OK_RECT");
+        } break;
+
+        case OK_CIRCLE: {
+            PHANIM_WARN("Circle shouldn't be scaled using PhanimScaleSizeVec2()");
+            return;
+        } break;
+
+        default: {
+            PHANIM_UNREACHABLE("Unknown object kind!");
+        } break;
+    }
+
+    PhanimMakeAnim(ptr, phanim_dvec2(start), phanim_dvec2(target), AVT_VEC2, duration);
+}
+
+void PhanimUpdate(float dt)
+{
+    if (CORE.time >= PhanimTotalAnimTime()) {
+        CORE.completed = true;
+        return;
+    }
 
     Anim *a = &CORE.anims[CORE.anim_current];
     if (a->anim_time >= a->duration) {
@@ -122,14 +300,17 @@ bool phanim_update(float dt)
             a = &CORE.anims[CORE.anim_current];
         } else {
             // Here, index will be out of bounds
-            return true;
+            CORE.completed = true;
+            return;
         }
     }
+
+    CORE.time += dt;
     if (a->anim_time < a->duration) {
         a->anim_time += dt;
     }
-    // float t = rate_func(RF_LINEAR, a->anim_time, a->duration);
-    float t = cubic_smoothstep(a->anim_time, 0.0f, a->duration);
+    float t = rate_func(a->func, a->anim_time, a->duration);
+    // float t = cubic_smoothstep(a->anim_time, 0.0f, a->duration);
     // float t = quintic_smoothstep(a->anim_time, 0.0f, a->duration);
 
     switch (a->val_type) {
@@ -142,7 +323,7 @@ bool phanim_update(float dt)
 
         case AVT_FLOAT: {
             if (a->ptr == NULL && a->target == NULL) {
-                // Probably, a pause scene
+                // Probably, a pause anim
             } else {
                 float start = *(float*)a->start;
                 float *ptr = (float*)a->ptr;
@@ -170,19 +351,22 @@ bool phanim_update(float dt)
             PHANIM_UNREACHABLE("Unknown anim value type!");
         } break;
     }
-
-    return false;
 }
 
-void phanim_render(void)
+void PhanimRender(void)
 {
-    for (int i = 0; i < CORE.obj_count; i++) {
+    for (size_t i = 0; i < CORE.obj_count; i++) {
         Object *o = &CORE.objs[i];
         if (!o->should_render) continue;
         switch (o->kind) {
             case OK_CIRCLE: {
-                Circle *c = &o->circle;
+                CircleData *c = &o->circle;
                 DrawCircleV(c->center, c->radius, c->color);
+            } break;
+
+            case OK_LINE: {
+                LineData *l = &o->line;
+                DrawLineEx(l->start, Vector2Add(l->start, l->size), l->thickness, l->color);
             } break;
 
             default: {
@@ -192,64 +376,19 @@ void phanim_render(void)
     }
 }
 
-size_t phanim_circle(Vector2 center, float radius, Color color)
+static float *phanim_dfloat(float val)
 {
-    Circle c = {
-        .center = center,
-        .radius = radius,
-        .color = color,
-        .stroke_width = 0.0f,
-        .stroke_color = BLANK,
-    };
-
-    Object obj = {
-        .kind = OK_CIRCLE,
-        .should_render = true,
-        .circle = c,
-    };
-
-    return phanim_add_obj(obj);
+    return arena_memdup(&CORE.temp_arena, &val, sizeof(float));
 }
 
-void phanim_move(size_t id, Vector2 target, float duration)
+static Vector2 *phanim_dvec2(Vector2 val)
 {
-    Object *obj = &CORE.objs[id];
-    Vector2 start = {0};
-    Vector2 *ptr = NULL;
-    switch (obj->kind) {
-        case OK_LINE: {
-            PHANIM_TODO("Implement AK_MOVE for OK_LINE");
-        } break;
-
-        case OK_RECT: {
-            PHANIM_TODO("Implement AK_MOVE for OK_RECT");
-        } break;
-
-        case OK_CIRCLE: {
-            ptr = &obj->circle.center;
-            start = *ptr;
-        } break;
-
-        default: {
-            PHANIM_UNREACHABLE("Unknown object kind!");
-        } break;
-    }
-
-    phanim_make_anim(ptr, phanim_vec2(start), phanim_vec2(target), AVT_VEC2, duration);
+    return arena_memdup(&CORE.temp_arena, &val, sizeof(Vector2));
 }
 
-static Vector2 *phanim_vec2(Vector2 val)
+static Color *phanim_dcolor(Color val)
 {
-    Vector2 *v = arena_alloc(&CORE.temp_arena, sizeof(Vector2));
-    *v = val;
-    return v;
-}
-
-static u8 *phanim_u8(u8 val)
-{
-    u8 *u = arena_alloc(&CORE.temp_arena, sizeof(u8));
-    *u = val;
-    return u;
+    return arena_memdup(&CORE.temp_arena, &val, sizeof(Color));
 }
 
 static size_t phanim_add_anim(Anim anim)
@@ -280,7 +419,7 @@ static size_t phanim_add_obj(Object obj)
     return ind;
 }
 
-static float rate_func(RateFunc func, float anim_time, float duration)
+static float rate_func(InterpFunc func, float anim_time, float duration)
 {
     // Cubic and Quintic smooth step sources
     //   - Source: https://en.wikipedia.org/wiki/Smoothstep
@@ -292,41 +431,24 @@ static float rate_func(RateFunc func, float anim_time, float duration)
             val = x;
             break;
         case RF_SINE:
-            // (sin((PI * x) + (PI / 2)) + 1) * 0.5
-            val = (sinf((PI * x) + (PI / 2.0f)) + 1.0f) * 0.5f;
+            // (-0.5 * cos(PI * x)) + 0.5
+            val = (-0.5f * cosf(PI * x)) + 0.5;
+            break;
+        case RF_SINE_PULSE:
+            // sin(PI * x)
+            val = sinf(PI * x);
             break;
         case RF_CUBIC_SMOOTH_STEP:
-            // AMD cubic smooth step
-            // 3x^2 - 2x^3
-            val = (3*x*x) - (2*x*x*x);
+            val = x * x * (3.0f - 2.0f * x);
             break;
         case RF_QUINTIC_SMOOTH_STEP:
-            // AMD quintic smooth step
-            // 6x^5 - 15x^4 + 10x^3
-            val = (6*x*x*x*x*x) - (15*x*x*x*x) + (10*x*x*x);
+            val = x * x * x * (x * (6.0f * x - 15.0f) + 10.0f);
             break;
         default:
             PHANIM_UNREACHABLE("Unknown rate function.");
             break;
     }
     return val;
-}
-
-static float cubic_smoothstep(float x, float min, float max)
-{
-    // Scale, and clamp x to 0..1 range
-    x = Clamp((x - min) / (max - min), 0.0, 1.0);
-
-    return x * x * (3.0f - 2.0f * x);
-}
-
-static float quintic_smoothstep(float x, float min, float max)
-{
-    if (min >= max) TraceLog(LOG_FATAL, "quintic_smoothstep: min >= max");
-    // Scale, and clamp x to 0..1 range
-    x = Clamp((x - min) / (max - min), 0.0, 1.0);
-
-    return x * x * x * (x * (6.0f * x - 15.0f) + 10.0f);
 }
 
 static void anim_print(Anim *a)
@@ -368,4 +490,21 @@ static void anim_print(Anim *a)
     TraceLog(LOG_INFO, "    time: %.2f", a->anim_time);
     TraceLog(LOG_INFO, "    duration: %.2f", a->duration);
     TraceLog(LOG_INFO, "}");
+}
+
+static void assert_id(size_t id, bool is_anim)
+{
+    size_t max;
+    const char *type;
+    if (is_anim) {
+        max = CORE.anim_count;
+        type = "ANIM";
+    } else {
+        max = CORE.obj_count;
+        type = "OBJ";
+    }
+
+    // No lower bound checking because `size_t` is always >= 0
+    if (id >= max)
+        TraceLog(LOG_FATAL, "%s: ID(%zu) is out of bounds. (ID >= %d)", type, id, max);
 }

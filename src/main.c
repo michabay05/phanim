@@ -1,17 +1,15 @@
 #include "phanim.h"
 #include "raylib.h"
+#include "scene.c"
 
 int main(void)
 {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(800, 600, "Physics Animations");
-    SetTargetFPS(30);
+    SetTargetFPS(60);
 
-    {
-        size_t id = phanim_circle(vec2(200, 150), 20, color(230, 41, 55, 255));
-        phanim_move(id, vec2(700, 500), 1.0f);
-        TraceLog(LOG_INFO, "Anim count: %d", phanim_anim_count());
-    }
+    SceneMain();
+    TraceLog(LOG_INFO, "Anim count: %d", PhanimAnimCount());
 
     bool pause = true;
     while (!WindowShouldClose()) {
@@ -20,19 +18,22 @@ int main(void)
         }
 
         BeginDrawing();
-        ClearBackground(GetColor(0x0));
+        ClearBackground(PhanimGetBackground());
 
             float dt = GetFrameTime();
-            if (!pause) phanim_update(dt);
-            phanim_render();
+            if (!pause) PhanimUpdate(dt);
+            PhanimRender();
 
             DrawFPS(10, 10);
             // Paused or Playing text
             const char *pause_text = pause ? "Paused" : "Playing";
             DrawText(pause_text, 10, 40, 20, WHITE);
             // (Current time / Total time) text
-            const char *time_text = TextFormat("%.2f / %.2f", phanim_get_time(), phanim_total_anim_time());
+            const char *time_text = TextFormat("%.2f / %.2f", PhanimGetTime(), PhanimTotalAnimTime());
             DrawText(time_text, 10, 70, 20, WHITE);
+            // (Current anim id / Total anim id) text
+            const char *anim_progress = TextFormat("%d / %d", PhanimCurrentAnimId(), PhanimAnimCount());
+            DrawText(anim_progress, 10, 100, 20, WHITE);
 
             // Timeline
             float tbw = 0.9f * (float)GetScreenWidth();
@@ -45,7 +46,7 @@ int main(void)
             };
             DrawRectangleRec(time_bar, LIGHTGRAY);
             Vector2 center = {
-                time_bar.x + tbw * (phanim_get_time() / phanim_total_anim_time()),
+                time_bar.x + tbw * (PhanimGetTime() / PhanimTotalAnimTime()),
                 time_bar.y + (time_bar.height / 2.0f)
             };
             DrawCircleV(center, tbh, RED);
@@ -53,7 +54,7 @@ int main(void)
         EndDrawing();
     }
 
-    phanim_deinit();
+    PhanimDeinit();
     CloseWindow();
     return 0;
 }
