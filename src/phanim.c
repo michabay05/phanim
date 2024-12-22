@@ -5,7 +5,7 @@
 // TODOs
 //   [ ] Add a mechanism to group animations
 //   [ ] Improve smooth interpolations
-//   [ ] Added video rendering feature
+//   [ ] Add video rendering feature
 //   [ ] Implement mouse position to screen unit (for debugging)
 //       - Crosshair-style
 //   [ ] Determine how to render objects
@@ -17,6 +17,7 @@
 //   [ ] Setup a better pausing, i.e. waiting for X seconds, system
 //   [ ] Establish a coordinate systems based around relative units
 //   [ ] Remove obj and anim id because it's redundant (index and id are the same thing)
+//   [ ] Link an animation to an object via an object's id
 
 #define ARENA_IMPLEMENTATION
 #include "phanim.h"
@@ -26,11 +27,12 @@
 
 // TODO: add a group id to group anims that should happen at the same time
 typedef struct {
-    size_t id;
+    size_t id, obj_id;
     void *ptr;
     void *start;
     void *target;
     AnimValType val_type;
+    AnimKind kind;
     float anim_time;
     float duration;
     InterpFunc func;
@@ -61,6 +63,7 @@ static Vector2 *phanim_dvec2(Vector2 val);
 static Color *phanim_dcolor(Color val);
 static void anim_print(Anim *a);
 static void assert_id(size_t id, bool is_anim);
+static size_t make_anim(size_t id, void *ptr, void *start, void *target, AnimValType val_type, AnimKind kind, float duration);
 
 void PhanimInit(void)
 {
@@ -117,22 +120,6 @@ float PhanimTotalAnimTime(void)
     return total;
 }
 
-size_t PhanimMakeAnim(void *ptr, void *start, void *target, AnimValType val_type, float duration)
-{
-    Anim a = {
-        .id = CORE.anim_count,
-        .ptr = ptr,
-        .start = start,
-        .target = target,
-        .val_type = val_type,
-        .anim_time = 0.0,
-        .duration = duration,
-        .func = RF_CUBIC_SMOOTH_STEP
-    };
-
-    return phanim_add_anim(a);
-}
-
 void PhanimChangeInterpFunc(size_t id, InterpFunc func)
 {
     assert_id(id, true);
@@ -141,13 +128,13 @@ void PhanimChangeInterpFunc(size_t id, InterpFunc func)
 
 void PhanimPause(float duration)
 {
-    PhanimMakeAnim(NULL, NULL, NULL, AVT_FLOAT, duration);
+    make_anim(PHANIM_NO_ANIM, NULL, NULL, NULL, AVT_FLOAT, AK_PAUSE, duration);
 }
 
 size_t PhanimLine(Vector2 start, Vector2 end, Color color)
 {
     LineData l = {
-        .start = start,
+        .pos = start,
         .size = Vector2Subtract(end, start),
         .thickness = DEFAULT_LINE_THICKNESS,
         .color = color,
@@ -156,8 +143,26 @@ size_t PhanimLine(Vector2 start, Vector2 end, Color color)
     Object obj = {
         .id = CORE.obj_count,
         .kind = OK_LINE,
-        .should_render = true,
+        .should_render = false,
         .line = l,
+    };
+
+    return phanim_add_obj(obj);
+}
+
+size_t PhanimRect(Vector2 pos, Vector2 size, Color color)
+{
+    RectData r = {
+        .pos = pos,
+        .size = size,
+        .color = color,
+    };
+
+    Object obj = {
+        .id = CORE.obj_count,
+        .kind = OK_RECT,
+        .should_render = false,
+        .rect = r,
     };
 
     return phanim_add_obj(obj);
@@ -176,7 +181,7 @@ size_t PhanimCircle(Vector2 center, float radius, Color color)
     Object obj = {
         .id = CORE.obj_count,
         .kind = OK_CIRCLE,
-        .should_render = true,
+        .should_render = false,
         .circle = c,
     };
 
@@ -190,11 +195,11 @@ void PhanimTransformPos(size_t id, Vector2 start, Vector2 target, float duration
     Vector2 *ptr = NULL;
     switch (obj->kind) {
         case OK_LINE: {
-            ptr = &obj->line.start;
+            ptr = &obj->line.pos;
         } break;
 
         case OK_RECT: {
-            PHANIM_TODO("Implement POS_TRANSFORM for OK_RECT");
+            ptr = &obj->rect.pos;
         } break;
 
         case OK_CIRCLE: {
@@ -206,7 +211,7 @@ void PhanimTransformPos(size_t id, Vector2 start, Vector2 target, float duration
         } break;
     }
 
-    PhanimMakeAnim(ptr, phanim_dvec2(start), phanim_dvec2(target), AVT_VEC2, duration);
+    make_anim(id, ptr, phanim_dvec2(start), phanim_dvec2(target), AVT_VEC2, AK_POSITION_TRANSFORM, duration);
 }
 
 void PhanimFadeColor(size_t id, Color start, Color target, float duration)
@@ -220,7 +225,7 @@ void PhanimFadeColor(size_t id, Color start, Color target, float duration)
         } break;
 
         case OK_RECT: {
-            PHANIM_TODO("Implement AK_MOVE for OK_RECT");
+            ptr = &obj->rect.color;
         } break;
 
         case OK_CIRCLE: {
@@ -232,7 +237,7 @@ void PhanimFadeColor(size_t id, Color start, Color target, float duration)
         } break;
     }
 
-    PhanimMakeAnim(ptr, phanim_dcolor(start), phanim_dcolor(target), AVT_COLOR, duration);
+    make_anim(id, ptr, phanim_dcolor(start), phanim_dcolor(target), AVT_COLOR, AK_COLOR_FADE, duration);
 }
 
 size_t PhanimScaleSizeFloat(size_t id, float start, float target, float duration)
@@ -256,10 +261,10 @@ size_t PhanimScaleSizeFloat(size_t id, float start, float target, float duration
         } break;
     }
 
-    return PhanimMakeAnim(ptr, phanim_dfloat(start), phanim_dfloat(target), AVT_FLOAT, duration);
+    return make_anim(id, ptr, phanim_dfloat(start), phanim_dfloat(target), AVT_FLOAT, AK_SCALE, duration);
 }
 
-void PhanimScaleSizeVec2(size_t id, Vector2 start, Vector2 target, float duration)
+size_t PhanimScaleSizeVec2(size_t id, Vector2 start, Vector2 target, float duration)
 {
     assert_id(id, false);
     Object *obj = &CORE.objs[id];
@@ -270,12 +275,12 @@ void PhanimScaleSizeVec2(size_t id, Vector2 start, Vector2 target, float duratio
         } break;
 
         case OK_RECT: {
-            PHANIM_TODO("Implement AK_MOVE for OK_RECT");
+            ptr = &obj->rect.size;
         } break;
 
         case OK_CIRCLE: {
             PHANIM_WARN("Circle shouldn't be scaled using PhanimScaleSizeVec2()");
-            return;
+            return PHANIM_NO_ANIM;
         } break;
 
         default: {
@@ -283,12 +288,19 @@ void PhanimScaleSizeVec2(size_t id, Vector2 start, Vector2 target, float duratio
         } break;
     }
 
-    PhanimMakeAnim(ptr, phanim_dvec2(start), phanim_dvec2(target), AVT_VEC2, duration);
+    return make_anim(id, ptr, phanim_dvec2(start), phanim_dvec2(target), AVT_VEC2, AK_SCALE, duration);
+}
+
+void PhanimAddObject(size_t id)
+{
+    // This is a temporary system. This will be changed!
+    make_anim(id, NULL, NULL, NULL, AVT_VEC2, AK_IMMEDIATE, 0.0f);
 }
 
 void PhanimUpdate(float dt)
 {
-    if (CORE.time >= PhanimTotalAnimTime()) {
+    // if (CORE.time >= PhanimTotalAnimTime()) {
+    if (CORE.anim_current >= CORE.anim_count) {
         CORE.completed = true;
         return;
     }
@@ -304,14 +316,18 @@ void PhanimUpdate(float dt)
             return;
         }
     }
+    Object *obj = &CORE.objs[a->obj_id];
 
     CORE.time += dt;
+    if (!obj->should_render) obj->should_render = true;
+    if (a->kind == AK_IMMEDIATE) {
+        return;
+    }
+
     if (a->anim_time < a->duration) {
         a->anim_time += dt;
     }
     float t = rate_func(a->func, a->anim_time, a->duration);
-    // float t = cubic_smoothstep(a->anim_time, 0.0f, a->duration);
-    // float t = quintic_smoothstep(a->anim_time, 0.0f, a->duration);
 
     switch (a->val_type) {
         case AVT_VEC2: {
@@ -366,7 +382,13 @@ void PhanimRender(void)
 
             case OK_LINE: {
                 LineData *l = &o->line;
-                DrawLineEx(l->start, Vector2Add(l->start, l->size), l->thickness, l->color);
+                DrawLineEx(l->pos, Vector2Add(l->pos, l->size), l->thickness, l->color);
+            } break;
+
+            case OK_RECT: {
+                RectData *r = &o->rect;
+                Vector2 top_left = Vector2Subtract(r->pos, Vector2Scale(r->size, 0.5));
+                DrawRectangleV(top_left, r->size, r->color);
             } break;
 
             default: {
@@ -389,6 +411,24 @@ static Vector2 *phanim_dvec2(Vector2 val)
 static Color *phanim_dcolor(Color val)
 {
     return arena_memdup(&CORE.temp_arena, &val, sizeof(Color));
+}
+
+static size_t make_anim(size_t id, void *ptr, void *start, void *target, AnimValType val_type, AnimKind kind, float duration)
+{
+    Anim a = {
+        .id = CORE.anim_count,
+        .obj_id = id,
+        .ptr = ptr,
+        .start = start,
+        .target = target,
+        .val_type = val_type,
+        .kind = kind,
+        .anim_time = 0.0,
+        .duration = duration,
+        .func = RF_CUBIC_SMOOTH_STEP
+    };
+
+    return phanim_add_anim(a);
 }
 
 static size_t phanim_add_anim(Anim anim)

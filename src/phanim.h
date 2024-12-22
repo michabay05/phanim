@@ -41,6 +41,7 @@ typedef enum {
     AK_COLOR_FADE,
     AK_SCALE,
     AK_PAUSE,
+    AK_IMMEDIATE,
 } AnimKind;
 
 typedef enum {
@@ -51,11 +52,17 @@ typedef enum {
 } AnimValType;
 
 typedef struct {
-    Vector2 start;
+    Vector2 pos;
     Vector2 size;
     float thickness;
     Color color;
 } LineData;
+
+typedef struct {
+    Vector2 pos;
+    Vector2 size;
+    Color color;
+} RectData;
 
 typedef struct {
     Vector2 center;
@@ -71,6 +78,7 @@ typedef struct {
     bool should_render;
     union {
         LineData line;
+        RectData rect;
         CircleData circle;
     };
 } Object;
@@ -86,15 +94,16 @@ void PhanimSetBackground(Color color);
 
 size_t PhanimCircle(Vector2 center, float radius, Color color);
 size_t PhanimLine(Vector2 start, Vector2 end, Color color);
+size_t PhanimRect(Vector2 pos, Vector2 size, Color color);
 
-size_t PhanimMakeAnim(void *ptr, void *start, void *target, AnimValType val_type, float duration);
 void PhanimChangeInterpFunc(size_t id, InterpFunc func);
 
 void PhanimTransformPos(size_t id, Vector2 start, Vector2 target, float duration);
 void PhanimFadeColor(size_t id, Color start, Color target, float duration);
 size_t PhanimScaleSizeFloat(size_t id, float start, float target, float duration);
-void PhanimScaleSizeVec2(size_t id, Vector2 start, Vector2 target, float duration);
+size_t PhanimScaleSizeVec2(size_t id, Vector2 start, Vector2 target, float duration);
 void PhanimPause(float duration);
+void PhanimAddObject(size_t id);
 
 void PhanimUpdate(float dt);
 void PhanimRender(void);
