@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include "phanim.h"
 #include "raylib.h"
 
@@ -26,19 +28,26 @@ void CircleScenes(void)
     PhanimChangeInterpFunc(anim_id, RF_SINE_PULSE);
 }
 
-void SceneMain(void)
+void RectScenes(void)
 {
-    PhanimSetBackground(color(20, 20, 20, 255));
-
-    // CircleScenes();
-
-#if 1
     size_t red_rect = PhanimRect(vec2(200, 200), vec2(60, 60), RED);
     PhanimTransformPos(red_rect, vec2(200, 200), vec2(400, 300), 2.0f);
     PhanimScaleSizeVec2(red_rect, vec2(60, 60), vec2(30, 30), 1.0f);
     PhanimFadeColor(red_rect, RED, GREEN, 1.0f);
-#endif
 
     size_t blue_rect = PhanimRect(vec2(600, 200), vec2(60, 60), BLUE);
     PhanimAddObject(blue_rect);
+}
+
+void SceneMain(void)
+{
+    PhanimSetBackground(GRAY);
+    // PhanimSetBackground(color(20, 20, 20, 255));
+
+    RectScenes();
+
+    // PhanimStr str;
+    // PhanimStrInit(&str, "f(\\theta) = \\sin(\\theta)\\\\");
+    // size_t tex = PhanimTex(str, vec2(200, 100));
+    // PhanimAddObject(tex);
 }

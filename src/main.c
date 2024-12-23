@@ -1,3 +1,4 @@
+#define PHANIM_STR_IMPLEMENTATION
 #include "phanim.h"
 #include "raylib.h"
 #include "scene.c"

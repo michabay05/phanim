@@ -6,6 +6,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "arena.h"
+#include "phstr.h"
 
 // Taken from 'https://github.com/tsoding/nob.h/blob/main/nob.h'
 #define PHANIM_UNUSED(value) (void)(value)
@@ -33,6 +34,7 @@ typedef enum {
     OK_LINE,
     OK_RECT,
     OK_CIRCLE,
+    OK_TEX,
 } ObjKind;
 
 typedef enum {
@@ -73,6 +75,12 @@ typedef struct {
 } CircleData;
 
 typedef struct {
+    PhanimStr text;
+    float font_size;
+    Vector2 position;
+} TexData;
+
+typedef struct {
     size_t id;
     ObjKind kind;
     bool should_render;
@@ -80,6 +88,7 @@ typedef struct {
         LineData line;
         RectData rect;
         CircleData circle;
+        TexData tex;
     };
 } Object;
 
@@ -95,6 +104,7 @@ void PhanimSetBackground(Color color);
 size_t PhanimCircle(Vector2 center, float radius, Color color);
 size_t PhanimLine(Vector2 start, Vector2 end, Color color);
 size_t PhanimRect(Vector2 pos, Vector2 size, Color color);
+size_t PhanimTex(PhanimStr str, Vector2 pos);
 
 void PhanimChangeInterpFunc(size_t id, InterpFunc func);
 
